@@ -15,6 +15,7 @@
 const STATE = {
     viewColumns: [],
     availableColumns: [],
+    patients: [],
     currentView: 'vwTitanium_WLAdmin'
 };
 
@@ -65,6 +66,22 @@ async function fetchAvailableColumns(search = '') {
     }
 }
 
+
+/**
+ * Fetch patient data from the API
+ */
+async function fetchPatients() {
+    try {
+        const response = await fetch(`/api/patients?view_name=${STATE.currentView}`);
+        const data = await response.json();
+        STATE.patients = data.data || [];
+        renderViewTable(); // Re-render with data
+    } catch (error) {
+        console.error('Error fetching patients:', error);
+        showToast('Failed to load patient data', 'error');
+    }
+}
+
 // --- Render Functions ---
 
 /**
@@ -84,15 +101,32 @@ function renderViewTable() {
         </th>
     `).join('');
 
-    // Render sample data row (placeholder)
-    if (sortedColumns.length > 0) {
-        elements.tableBody.innerHTML = `
+
+    // Render rows
+    if (sortedColumns.length > 0 && STATE.patients && STATE.patients.length > 0) {
+        elements.tableBody.innerHTML = STATE.patients.map(patient => `
             <tr>
-                ${sortedColumns.map(col => `
+                ${sortedColumns.map(col => {
+            const value = patient[col.column_name];
+            // Handle boolean checkboxes or nulls
+            let displayValue = value;
+            if (value === null || value === undefined) displayValue = '';
+            else if (typeof value === 'boolean') displayValue = value ? 'Yes' : 'No';
+
+            return `
                     <td class="${col.is_right_aligned ? 'right-aligned' : ''}" style="width: ${col.grid_width}">
-                        <span style="color: var(--text-muted); font-style: italic;">Sample data</span>
+                        ${escapeHtml(String(displayValue))}
                     </td>
-                `).join('')}
+                `}).join('')}
+            </tr>
+        `).join('');
+    } else if (sortedColumns.length > 0) {
+        // Show empty state if columns exist but no data
+        elements.tableBody.innerHTML = `
+             <tr>
+                <td colspan="${sortedColumns.length}" style="text-align: center; padding: 2rem; color: var(--text-muted);">
+                    No patient data available.
+                </td>
             </tr>
         `;
     } else {
@@ -162,6 +196,7 @@ function escapeHtml(text) {
  */
 async function refreshData() {
     await fetchViewColumns();
+    await fetchPatients();
     showToast('View refreshed', 'success');
 }
 
@@ -170,8 +205,9 @@ async function refreshData() {
 elements.refreshBtn?.addEventListener('click', refreshData);
 
 // --- Initialize ---
-document.addEventListener('DOMContentLoaded', () => {
-    fetchViewColumns();
+document.addEventListener('DOMContentLoaded', async () => {
+    await fetchViewColumns();
+    fetchPatients();
 
     // Update view name badge
     if (elements.viewNameBadge) {
